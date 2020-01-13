@@ -1,26 +1,25 @@
 package ieeta.aot.terminal;
 
+import java.math.BigInteger;
+
 import ieeta.aot.Authorization;
-import net.i2p.crypto.eddsa.math.FieldElement;
-import net.i2p.crypto.eddsa.math.GroupElement;
+import ieeta.aot.Utils;
 
 public class TerminalSession {
-  private final Terminal term;
-  private final FieldElement r;
-  private final GroupElement nodeKey;
+  private final byte[] termKey;
+  private final byte[] token;
+  private final byte[] k1;
   
-  //private final Authorization.Data data;
-  
-  TerminalSession(Terminal term, FieldElement r, GroupElement nodeKey) {
-    this.term = term;
-    this.r = r;
-    this.nodeKey = nodeKey;
+  TerminalSession(byte[] termKey, byte[] token, byte[] k1) {
+    this.termKey = termKey;
+    this.token = token;
+    this.k1 = k1;
     
-    //TODO: encrypt En.t[r,time,H.]
+    System.out.println(Utils.bytesToHex(k1));
   }
   
   public Authorization authorize() {
-    //TODO: implement
-    return null;
+    //TODO: implement CC signature
+    return new Authorization(this.termKey, this.token);
   }
 }

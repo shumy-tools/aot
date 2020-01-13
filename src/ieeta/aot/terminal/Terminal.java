@@ -1,25 +1,41 @@
 package ieeta.aot.terminal;
 
+import ieeta.aot.Utils;
 import net.i2p.crypto.eddsa.math.FieldElement;
 import net.i2p.crypto.eddsa.math.GroupElement;
-import net.i2p.crypto.eddsa.spec.EdDSANamedCurveSpec;
-import net.i2p.crypto.eddsa.spec.EdDSANamedCurveTable;
 
 public class Terminal {
-  private static final EdDSANamedCurveSpec ed25519 = EdDSANamedCurveTable.getByName(EdDSANamedCurveTable.ED_25519);
-  private static final GroupElement basePoint = ed25519.getB();
-  
   final FieldElement skey;
-  final GroupElement pkey;
+  public final GroupElement pkey;
   
-  Terminal(FieldElement skey) {
+  public Terminal(FieldElement skey) {
     this.skey = skey;
-    this.pkey = basePoint.scalarMultiply(skey.toByteArray());
+    
+    final GroupElement preKey = Utils.basePoint.scalarMultiply(skey.toByteArray());
+    this.pkey = Utils.curve.createPoint(preKey.toByteArray(), true);
   }
   
   public TerminalSession genSession(GroupElement nodeKey) {
-    final FieldElement r = TerminalFactory.getRandomFieldElement();
+    final FieldElement rField = Utils.getRandomFieldElement();
     
-    return new TerminalSession(this, r, nodeKey);
+    // H(r.t.Pn) -> k1
+    final GroupElement key = Utils.curve.createPoint(nodeKey.scalarMultiply(skey.toByteArray()).toByteArray(), true);
+    final byte[] k1 = Utils.ecdh(rField, key);
+    
+    // H(t.Pn) -> s
+    final byte[] secret = Utils.ecdh(skey, nodeKey);
+    
+    // [r, time]
+    final byte[] rBytes = rField.toByteArray();
+    final byte[] timeBytes = Utils.longToBytes(System.currentTimeMillis());
+    byte[] plaintext = new byte[rBytes.length + timeBytes.length];
+    System.arraycopy(rBytes, 0, plaintext, 0, rBytes.length);
+    System.arraycopy(timeBytes, 0, plaintext, rBytes.length, timeBytes.length);
+    
+    // <iv, Es[r, time]>
+    final byte[] token = Utils.encrypt(secret, plaintext);
+    //System.out.println("T r: " + rField);
+    
+    return new TerminalSession(this.pkey.toByteArray(), token, k1);
   }
 }

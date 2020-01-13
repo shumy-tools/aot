@@ -1,14 +1,12 @@
 package ieeta.aot;
 
 public class Authorization {
-  public static class Data {
-    
-  }
+  public final byte[] termKey;
+  public final byte[] token;
   
-  private final Data data;
-  
-  Authorization(Data data) {
-    this.data = data;
+  public Authorization(byte[] termKey, byte[] token) {
+    this.termKey = termKey;
+    this.token = token;
     //TODO: add CC signature
   }
 }
