@@ -1,5 +1,7 @@
 package ieeta.aot.node;
 
+import java.util.function.Function;
+
 import ieeta.aot.Authorization;
 import ieeta.aot.Utils;
 import net.i2p.crypto.eddsa.math.FieldElement;
@@ -16,7 +18,7 @@ public class NodeServer {
     this.pkey = Utils.curve.createPoint(preKey.toByteArray(), true);
   }
   
-  public NodeSession bindSession(Authorization auth) {
+  public NodeSession bindSession(Authorization auth, Function<CheckData, Boolean> checkFunc) {
     // H(n.Pt) -> s
     final GroupElement termKey = Utils.curve.createPoint(auth.termKey, true);
     final byte[] secret = Utils.ecdh(skey, termKey);
@@ -31,13 +33,27 @@ public class NodeServer {
     final FieldElement rField = Utils.field.fromByteArray(rBytes);
     final long time = Utils.bytesToLong(timeBytes);
     
-    //System.out.println("N r: " + rField);
-    //TODO: check time
+    // check data
+    final byte[] data = new byte[auth.termKey.length + auth.token.length];
+    System.arraycopy(auth.termKey, 0, data, 0, auth.termKey.length);
+    System.arraycopy(auth.token, 0, data, 0, auth.token.length);
+    
+    final CheckData cdata = new CheckData(time, data, auth.sig);
+    if (!checkFunc.apply(cdata)) {
+      throw new RuntimeException("Authorization failed!");
+    }
     
     // H(r.n.Pt) -> k1
     final GroupElement key = Utils.curve.createPoint(termKey.scalarMultiply(skey.toByteArray()).toByteArray(), true);
     final byte[] k1 = Utils.ecdh(rField, key);
     
-    return new NodeSession(k1);
+    // Ek1[k2]
+    final byte[] k2 = Utils.getRandomFieldElement().toByteArray();
+    final byte[] encK2 = Utils.encrypt(k1, k2);
+    
+    // k1 XOR k2 = k
+    final byte[] k = Utils.bytesXOR(k1, k2);
+    
+    return new NodeSession(k, encK2);
   }
 }

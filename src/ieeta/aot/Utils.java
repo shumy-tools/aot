@@ -37,6 +37,15 @@ public class Utils {
     return new NodeServer(skey);
   }
   
+  public static byte[] bytesXOR(byte[] k1, byte[] k2) {
+    final byte[] k = new byte[k1.length];
+    int i = 0;
+    for (byte b : k1)
+      k[i] = (byte) (b ^ k2[i++]);
+    
+    return k;
+  }
+  
   public static String bytesToHex(byte[] a) {
     final StringBuilder sb = new StringBuilder(a.length * 2);
     for(byte b: a)

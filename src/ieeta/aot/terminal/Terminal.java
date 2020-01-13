@@ -28,13 +28,12 @@ public class Terminal {
     // [r, time]
     final byte[] rBytes = rField.toByteArray();
     final byte[] timeBytes = Utils.longToBytes(System.currentTimeMillis());
-    byte[] plaintext = new byte[rBytes.length + timeBytes.length];
+    final byte[] plaintext = new byte[rBytes.length + timeBytes.length];
     System.arraycopy(rBytes, 0, plaintext, 0, rBytes.length);
     System.arraycopy(timeBytes, 0, plaintext, rBytes.length, timeBytes.length);
     
     // <iv, Es[r, time]>
     final byte[] token = Utils.encrypt(secret, plaintext);
-    //System.out.println("T r: " + rField);
     
     return new TerminalSession(this.pkey.toByteArray(), token, k1);
   }
