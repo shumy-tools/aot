@@ -21,7 +21,7 @@ sourceSets {
 }
 
 dependencies {
-  compile 'net.i2p.crypto:eddsa:0.3.+'
+  compile 'net.i2p.crypto:eddsa:0.3.0'
 }
 
 jar {
@@ -35,25 +35,6 @@ jar {
         "deps/$gid/" + it.file.name
     }.join(' ')
   }
-}
-
-task genPom {
-  pom {
-      project {
-        groupId project.group.toString()
-        artifactId 'aot'
-        version version
-
-        inceptionYear '2020'
-        licenses {
-            license {
-                name 'MIT License'
-                url 'MIT'
-                distribution 'repo'
-            }
-        }
-      }
-  }.writeTo("pom.xml")
 }
 
 task deps(type: Copy) {
