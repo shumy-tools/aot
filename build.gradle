@@ -33,8 +33,27 @@ jar {
       'Class-Path': configurations.runtime.resolvedConfiguration.resolvedArtifacts.collect {
         def gid = it.id.componentIdentifier.group
         "deps/$gid/" + it.file.name
-      }.join(' ')
+    }.join(' ')
   }
+}
+
+task genPom {
+  pom {
+      project {
+        groupId project.group.toString()
+        artifactId 'aot'
+        version version
+
+        inceptionYear '2020'
+        licenses {
+            license {
+                name 'MIT License'
+                url 'MIT'
+                distribution 'repo'
+            }
+        }
+      }
+  }.writeTo("pom.xml")
 }
 
 task deps(type: Copy) {
