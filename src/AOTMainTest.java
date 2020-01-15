@@ -12,15 +12,16 @@ public class AOTMainTest {
     
     final TerminalSession tSession = term.genSession(node.pkey);
     final Authorization auth = tSession.authorize(data -> {
-      System.out.println(Utils.bytesToHex(data));
-      //TODO: perform CC signature on data
+      System.out.println("Token: " + Utils.bytesToHex(data));
+      System.out.println("SHA-256(Token): " + Utils.bytesToHex(Utils.hash(data)));
+      //TODO: perform RSA signature on data
       return null;
     });
     
     //TODO: authorization is sent via network
     
     final NodeSession nSession = node.bindSession(auth, cdata -> {
-      System.out.println(Utils.bytesToHex(cdata.data));
+      System.out.println("Token: " + Utils.bytesToHex(cdata.data));
       //TODO: perform a CC signature check and timestamp
       return true;
     });

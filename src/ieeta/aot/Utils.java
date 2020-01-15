@@ -2,6 +2,7 @@ package ieeta.aot;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 
 import javax.crypto.Cipher;
@@ -75,16 +76,19 @@ public class Utils {
     return new Ed25519FieldElement(field, t);
   }
   
-  public static byte[] ecdh(FieldElement secret, GroupElement pkey) {
-    final GroupElement key = pkey.scalarMultiply(secret.toByteArray());
+  public static byte[] hash(byte[] data) {
     try {
       final MessageDigest digest = MessageDigest.getInstance("SHA-256");
-      digest.update(key.toByteArray());
-      return digest.digest();
-    } catch (Throwable e) {
+      return digest.digest(data);
+    } catch (NoSuchAlgorithmException e) {
       e.printStackTrace();
-      throw new RuntimeException("Error on ecdh!");
+      throw new RuntimeException("Error on hash!");
     }
+  }
+  
+  public static byte[] ecdh(FieldElement secret, GroupElement pkey) {
+    final GroupElement key = pkey.scalarMultiply(secret.toByteArray());
+    return hash(key.toByteArray());
   }
   
   public static byte[] encrypt(byte[] secret, byte[] plaintext) {
