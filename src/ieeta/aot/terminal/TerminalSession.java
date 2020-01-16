@@ -3,6 +3,7 @@ package ieeta.aot.terminal;
 import java.util.function.Function;
 
 import ieeta.aot.Authorization;
+import ieeta.aot.Authorization.ExtSignature;
 import ieeta.aot.Utils;
 
 public class TerminalSession {
@@ -18,13 +19,13 @@ public class TerminalSession {
     this.k1 = k1;
   }
   
-  public Authorization authorize(Function<byte[], byte[]> sigFunc) {
+  public Authorization authorize(Function<byte[], ExtSignature> sigFunc) {
     final byte[] data = new byte[termKey.length + token.length];
     System.arraycopy(termKey, 0, data, 0, termKey.length);
     System.arraycopy(token, 0, data, 0, token.length);
     
-    final byte[] sig = sigFunc.apply(data);
-    return new Authorization(this.termKey, this.token, sig);
+    final ExtSignature extSig = sigFunc.apply(data);
+    return new Authorization(this.termKey, this.token, extSig);
   }
   
   public void setK(byte[] encK2) {

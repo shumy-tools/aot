@@ -38,7 +38,7 @@ public class NodeServer {
     System.arraycopy(auth.termKey, 0, data, 0, auth.termKey.length);
     System.arraycopy(auth.token, 0, data, 0, auth.token.length);
     
-    final CheckData cdata = new CheckData(time, data, auth.sig);
+    final CheckData cdata = new CheckData(time, data, auth.extSig);
     if (!checkFunc.apply(cdata)) {
       throw new RuntimeException("Authorization failed!");
     }
