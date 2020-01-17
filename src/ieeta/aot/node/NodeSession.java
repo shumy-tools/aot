@@ -1,17 +1,20 @@
 package ieeta.aot.node;
 
+import ieeta.aot.AuthResponse;
+import ieeta.aot.EncryptedData;
 import ieeta.aot.Utils;
 
 public class NodeSession {
   private final byte[] k;
-  public final byte[] encK2;
+  public final AuthResponse resp;
   
-  public NodeSession(byte[] k, byte[] encK2) {
+  NodeSession(byte[] k, byte[] nodePen, byte[] nodeSig) {
     this.k = k;
-    this.encK2 = encK2;
+    this.resp = new AuthResponse(nodePen, nodeSig);
   }
   
-  public byte[] encrypt(byte[] cleartext) {
-    return Utils.encrypt(this.k, cleartext);
+  public EncryptedData encrypt(byte[] cleartext) {
+    final byte[] d = Utils.genRandomFieldElement().toByteArray();
+    return Utils.encrypt(this.k, d, cleartext);
   }
 }

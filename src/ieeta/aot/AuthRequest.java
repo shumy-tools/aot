@@ -1,6 +1,10 @@
 package ieeta.aot;
 
-public class Authorization {
+import java.io.Serializable;
+
+public class AuthRequest implements Serializable {
+  private static final long serialVersionUID = 1L;
+
   public static class ExtSignature {
     public final byte[] operKey;
     public final byte[] sig;
@@ -11,13 +15,15 @@ public class Authorization {
     }
   }
   
-  public final byte[] termKey;
   public final byte[] token;
+  public final byte[] termKey;
+  public final byte[] termSig;
   public final ExtSignature extSig;
   
-  public Authorization(byte[] termKey, byte[] token, ExtSignature extSig) {
-    this.termKey = termKey;
+  public AuthRequest(byte[] token, byte[] termKey, byte[] termSig, ExtSignature extSig) {
     this.token = token;
+    this.termKey = termKey;
+    this.termSig = termSig;
     this.extSig = extSig;
   }
 }

@@ -1,59 +1,58 @@
 package ieeta.aot.node;
 
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.util.function.Function;
 
-import ieeta.aot.Authorization;
+import ieeta.aot.AuthRequest;
 import ieeta.aot.Utils;
 import net.i2p.crypto.eddsa.math.FieldElement;
 import net.i2p.crypto.eddsa.math.GroupElement;
 
 public class NodeServer {
-  final FieldElement skey;
-  public final GroupElement pkey;
+  final PrivateKey skey;
+  public final PublicKey pkey;
   
-  public NodeServer(FieldElement skey) {
+  public NodeServer(PrivateKey skey) {
     this.skey = skey;
-    
-    final GroupElement preKey = Utils.basePoint.scalarMultiply(skey.toByteArray());
-    this.pkey = Utils.curve.createPoint(preKey.toByteArray(), true);
+    this.pkey = Utils.genPublicKey(skey);
   }
   
-  public NodeSession bindSession(Authorization auth, Function<CheckData, Boolean> checkFunc) {
-    // H(n.Pt) -> s
-    final GroupElement termKey = Utils.curve.createPoint(auth.termKey, true);
-    final byte[] secret = Utils.ecdh(skey, termKey);
+  public NodeSession bindSession(AuthRequest auth, Function<CheckData, Boolean> checkFunc) {
+    // check Sig_t<Pet, time>
+    final PublicKey termKey = Utils.decodePublicKey(auth.termKey);
+    if (!Utils.sigVerify(termKey, auth.token, auth.termSig)) {
+      throw new RuntimeException("Invalid terminal signature!");
+    }
     
-    // [r, time]
-    final byte[] plaintext = Utils.dencrypt(secret, auth.token);
-    final byte[] rBytes = new byte[plaintext.length - Long.BYTES];
+    // decode [Pet, time]
+    final byte[] PetBytes = new byte[auth.token.length - Long.BYTES];
     final byte[] timeBytes = new byte[Long.BYTES];
-    System.arraycopy(plaintext, 0, rBytes, 0, rBytes.length);
-    System.arraycopy(plaintext, rBytes.length, timeBytes, 0, timeBytes.length);
+    System.arraycopy(auth.token, 0, PetBytes, 0, PetBytes.length);
+    System.arraycopy(auth.token, PetBytes.length, timeBytes, 0, timeBytes.length);
     
-    final FieldElement rField = Utils.field.fromByteArray(rBytes);
+    // TODO: check if Pet is in the group E(F)!
+    final GroupElement Pet = Utils.curve.createPoint(PetBytes, true);
     final long time = Utils.bytesToLong(timeBytes);
     
-    // check data
-    final byte[] data = new byte[auth.termKey.length + auth.token.length];
+    // check Sig_o<Pt, Sig_t>
+    final byte[] data = new byte[auth.termKey.length + auth.termSig.length];
     System.arraycopy(auth.termKey, 0, data, 0, auth.termKey.length);
-    System.arraycopy(auth.token, 0, data, 0, auth.token.length);
+    System.arraycopy(auth.termSig, 0, data, auth.termKey.length, auth.termSig.length);
     
     final CheckData cdata = new CheckData(time, data, auth.extSig);
     if (!checkFunc.apply(cdata)) {
       throw new RuntimeException("Authorization failed!");
     }
     
-    // H(r.n.Pt) -> k1
-    final GroupElement key = Utils.curve.createPoint(termKey.scalarMultiply(skey.toByteArray()).toByteArray(), true);
-    final byte[] k1 = Utils.ecdh(rField, key);
+    // en x G -> Pen
+    final FieldElement en = Utils.genRandomFieldElement();
+    final byte[] PenBytes =  Utils.genPublicKey(en).toByteArray();
     
-    // Ek1[k2]
-    final byte[] k2 = Utils.getRandomFieldElement().toByteArray();
-    final byte[] encK2 = Utils.encrypt(k1, k2);
+    // H(en x Pet) -> k
+    final byte[] k = Utils.ecdh(en, Pet);
     
-    // k1 XOR k2 = k
-    final byte[] k = Utils.bytesXOR(k1, k2);
-    
-    return new NodeSession(k, encK2);
+    final byte[] sig = Utils.sign(skey, PenBytes);
+    return new NodeSession(k, PenBytes, sig);
   }
 }

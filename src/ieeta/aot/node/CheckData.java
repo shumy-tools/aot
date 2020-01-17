@@ -1,6 +1,6 @@
 package ieeta.aot.node;
 
-import ieeta.aot.Authorization.ExtSignature;
+import ieeta.aot.AuthRequest.ExtSignature;
 
 public class CheckData {
   public final long time;

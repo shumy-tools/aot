@@ -1,43 +1,42 @@
 package ieeta.aot.terminal;
 
-import java.util.function.Function;
+import java.security.PublicKey;
 
-import ieeta.aot.Authorization;
-import ieeta.aot.Authorization.ExtSignature;
+import ieeta.aot.AuthRequest;
+import ieeta.aot.AuthRequest.ExtSignature;
+import ieeta.aot.AuthResponse;
+import ieeta.aot.EncryptedData;
 import ieeta.aot.Utils;
+import net.i2p.crypto.eddsa.math.FieldElement;
+import net.i2p.crypto.eddsa.math.GroupElement;
 
 public class TerminalSession {
-  private final byte[] termKey;
-  private final byte[] token;
-  private final byte[] k1;
-  
   private byte[] k = null;
+  private final FieldElement et;
+  public final AuthRequest req;
   
-  TerminalSession(byte[] termKey, byte[] token, byte[] k1) {
-    this.termKey = termKey;
-    this.token = token;
-    this.k1 = k1;
+  TerminalSession(FieldElement et, byte[] token, byte[] termKey, byte[] termSig, ExtSignature extSig) {
+    this.et = et;
+    this.req = new AuthRequest(token, termKey, termSig, extSig);
   }
   
-  public Authorization authorize(Function<byte[], ExtSignature> sigFunc) {
-    final byte[] data = new byte[termKey.length + token.length];
-    System.arraycopy(termKey, 0, data, 0, termKey.length);
-    System.arraycopy(token, 0, data, 0, token.length);
-    
-    final ExtSignature extSig = sigFunc.apply(data);
-    return new Authorization(this.termKey, this.token, extSig);
-  }
-  
-  public void setK(byte[] encK2) {
+  public void setK(PublicKey nodeKey, AuthResponse resp) {
     if (k != null) {
       throw new RuntimeException("k already set!");
     }
     
-    final byte[] k2 = Utils.dencrypt(k1, encK2);
-    this.k = Utils.bytesXOR(k1, k2);
+    if (!Utils.sigVerify(nodeKey, resp.nodePen, resp.nodeSig)) {
+      throw new RuntimeException("Invalid node signature!");
+    }
+    
+    // TODO: check if Pen is in the group E(F)!
+    final GroupElement Pen = Utils.curve.createPoint(resp.nodePen, true);
+    
+    // H(et x Pen) -> k
+    this.k = Utils.ecdh(et, Pen);
   }
   
-  public byte[] dencrypt(byte[] ciphertext) {
+  public byte[] dencrypt(EncryptedData ciphertext) {
     if (k == null) {
       throw new RuntimeException("k is not set!");
     }

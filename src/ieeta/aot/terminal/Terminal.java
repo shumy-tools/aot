@@ -1,40 +1,47 @@
 package ieeta.aot.terminal;
 
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.util.function.Function;
+
 import ieeta.aot.Utils;
+import ieeta.aot.AuthRequest.ExtSignature;
 import net.i2p.crypto.eddsa.math.FieldElement;
 import net.i2p.crypto.eddsa.math.GroupElement;
 
 public class Terminal {
-  final FieldElement skey;
-  public final GroupElement pkey;
+  final PrivateKey skey;
+  public final PublicKey pkey;
   
-  public Terminal(FieldElement skey) {
+  public Terminal(PrivateKey skey) {
     this.skey = skey;
-    
-    final GroupElement preKey = Utils.basePoint.scalarMultiply(skey.toByteArray());
-    this.pkey = Utils.curve.createPoint(preKey.toByteArray(), true);
+    this.pkey = Utils.genPublicKey(skey);
   }
   
-  public TerminalSession genSession(GroupElement nodeKey) {
-    final FieldElement rField = Utils.getRandomFieldElement();
+  public TerminalSession genSession(Function<byte[], ExtSignature> sigFunc) {
+    final byte[] termKey = this.pkey.getEncoded();
     
-    // H(r.t.Pn) -> k1
-    final GroupElement key = Utils.curve.createPoint(nodeKey.scalarMultiply(skey.toByteArray()).toByteArray(), true);
-    final byte[] k1 = Utils.ecdh(rField, key);
+    // et x G -> Pet
+    final FieldElement et = Utils.genRandomFieldElement();
+    final GroupElement Pet = Utils.genPublicKey(et);
     
-    // H(t.Pn) -> s
-    final byte[] secret = Utils.ecdh(skey, nodeKey);
-    
-    // [r, time]
-    final byte[] rBytes = rField.toByteArray();
+    // [Pet, time]
+    final byte[] PetBytes = Pet.toByteArray();
     final byte[] timeBytes = Utils.longToBytes(System.currentTimeMillis());
-    final byte[] plaintext = new byte[rBytes.length + timeBytes.length];
-    System.arraycopy(rBytes, 0, plaintext, 0, rBytes.length);
-    System.arraycopy(timeBytes, 0, plaintext, rBytes.length, timeBytes.length);
+    final byte[] token = new byte[PetBytes.length + timeBytes.length];
+    System.arraycopy(PetBytes, 0, token, 0, PetBytes.length);
+    System.arraycopy(timeBytes, 0, token, PetBytes.length, timeBytes.length);
     
-    // <iv, Es[r, time]>
-    final byte[] token = Utils.encrypt(secret, plaintext);
+    // Sig_t<Pet, time>
+    final byte[] termSig = Utils.sign(skey, token);
     
-    return new TerminalSession(this.pkey.toByteArray(), token, k1);
+    // Sig_o<Pt, Sig_t>
+    final byte[] data = new byte[termKey.length + termSig.length];
+    System.arraycopy(termKey, 0, data, 0, termKey.length);
+    System.arraycopy(termSig, 0, data, termKey.length, termSig.length);
+    
+    final ExtSignature extSig = sigFunc.apply(data);
+    
+    return new TerminalSession(et, token, termKey, termSig, extSig);
   }
 }

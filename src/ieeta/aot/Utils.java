@@ -2,8 +2,11 @@ package ieeta.aot;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.Signature;
+import java.security.spec.X509EncodedKeySpec;
 
 import javax.crypto.Cipher;
 import javax.crypto.spec.IvParameterSpec;
@@ -11,6 +14,9 @@ import javax.crypto.spec.SecretKeySpec;
 
 import ieeta.aot.node.NodeServer;
 import ieeta.aot.terminal.Terminal;
+import net.i2p.crypto.eddsa.EdDSAEngine;
+import net.i2p.crypto.eddsa.EdDSAPrivateKey;
+import net.i2p.crypto.eddsa.EdDSAPublicKey;
 import net.i2p.crypto.eddsa.math.Curve;
 import net.i2p.crypto.eddsa.math.Field;
 import net.i2p.crypto.eddsa.math.FieldElement;
@@ -18,6 +24,8 @@ import net.i2p.crypto.eddsa.math.GroupElement;
 import net.i2p.crypto.eddsa.math.ed25519.Ed25519FieldElement;
 import net.i2p.crypto.eddsa.spec.EdDSANamedCurveSpec;
 import net.i2p.crypto.eddsa.spec.EdDSANamedCurveTable;
+import net.i2p.crypto.eddsa.spec.EdDSAPrivateKeySpec;
+import net.i2p.crypto.eddsa.spec.EdDSAPublicKeySpec;
 
 public class Utils {
   public static final EdDSANamedCurveSpec ed25519 = EdDSANamedCurveTable.getByName(EdDSANamedCurveTable.ED_25519);
@@ -29,22 +37,13 @@ public class Utils {
   public static final SecureRandom random = new SecureRandom();
   
   public static Terminal genTerminal() {
-    final FieldElement skey = getRandomFieldElement();
+    final PrivateKey skey = Utils.genRandomPrivateKey();
     return new Terminal(skey);
   }
   
   public static NodeServer genNodeServer() {
-    final FieldElement skey = getRandomFieldElement();
+    final PrivateKey skey = Utils.genRandomPrivateKey();
     return new NodeServer(skey);
-  }
-  
-  public static byte[] bytesXOR(byte[] k1, byte[] k2) {
-    final byte[] k = new byte[k1.length];
-    int i = 0;
-    for (byte b : k1)
-      k[i] = (byte) (b ^ k2[i++]);
-    
-    return k;
   }
   
   public static String bytesToHex(byte[] a) {
@@ -67,7 +66,7 @@ public class Utils {
     return buffer.getLong();
   }
   
-  public static FieldElement getRandomFieldElement() {
+  public static FieldElement genRandomFieldElement() {
     final int[] t = new int[10];
     for (int j=0; j<10; j++) {
       t[j] = random.nextInt(1 << 25) - (1 << 24);
@@ -76,11 +75,41 @@ public class Utils {
     return new Ed25519FieldElement(field, t);
   }
   
+  public static PrivateKey genRandomPrivateKey() {
+    final byte[] seed = new byte[field.getb()/8];
+    random.nextBytes(seed);
+    
+    final EdDSAPrivateKeySpec privKey = new EdDSAPrivateKeySpec(seed, ed25519);
+    return new EdDSAPrivateKey(privKey);
+  }
+  
+  public static PublicKey genPublicKey(PrivateKey secret) {
+    final EdDSAPrivateKey privKey = (EdDSAPrivateKey) secret;
+    
+    final EdDSAPublicKeySpec pubKey = new EdDSAPublicKeySpec(privKey.getA(), ed25519);
+    return new EdDSAPublicKey(pubKey);
+  }
+  
+  public static GroupElement genPublicKey(FieldElement secret) {
+    final GroupElement preKey = Utils.basePoint.scalarMultiply(secret.toByteArray());
+    return Utils.curve.createPoint(preKey.toByteArray(), true);
+  }
+  
+  public static PublicKey decodePublicKey(byte[] encoded) {
+    final X509EncodedKeySpec x509 = new X509EncodedKeySpec(encoded);
+    try {
+      return new EdDSAPublicKey(x509);
+    } catch (Throwable e) {
+      e.printStackTrace();
+      throw new RuntimeException("Error on decodePublicKey!");
+    }
+  }
+  
   public static byte[] hash(byte[] data) {
     try {
       final MessageDigest digest = MessageDigest.getInstance("SHA-256");
       return digest.digest(data);
-    } catch (NoSuchAlgorithmException e) {
+    } catch (Throwable e) {
       e.printStackTrace();
       throw new RuntimeException("Error on hash!");
     }
@@ -91,43 +120,73 @@ public class Utils {
     return hash(key.toByteArray());
   }
   
-  public static byte[] encrypt(byte[] secret, byte[] plaintext) {
+  public static byte[] sign(PrivateKey secret, byte[] msg) {
     try {
-      final Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-      final SecretKeySpec key = new SecretKeySpec(secret, "AES");
+      final Signature sgr = new EdDSAEngine(MessageDigest.getInstance(ed25519.getHashAlgorithm()));
+      sgr.setParameter(EdDSAEngine.ONE_SHOT_MODE);
+      sgr.initSign(secret);
+      sgr.update(msg);
+      return sgr.sign();
+    } catch (Throwable e) {
+      e.printStackTrace();
+      throw new RuntimeException("Error on sign!");
+    }
+  }
+  
+  public static boolean sigVerify(PublicKey key, byte[] msg, byte[] sig) {
+    try {
+      final Signature sgr = new EdDSAEngine(MessageDigest.getInstance(ed25519.getHashAlgorithm()));
+      sgr.setParameter(EdDSAEngine.ONE_SHOT_MODE);
+      sgr.initVerify(key);
+      sgr.update(msg);
+      return sgr.verify(sig);
+    } catch (Throwable e) {
+      e.printStackTrace();
+      return false;
+    }
+  }
+  
+  public static EncryptedData encrypt(byte[] k, byte[] d, byte[] plaintext) {
+    try {
+      // encrypt data
+      final SecretKeySpec dataKey = new SecretKeySpec(d, "AES");
+      final Cipher cipherData = Cipher.getInstance("AES/CBC/PKCS5Padding");
       
-      final byte[] ivBytes = new byte[cipher.getBlockSize()];
+      final byte[] ivBytes = new byte[cipherData.getBlockSize()];
       Utils.random.nextBytes(ivBytes);
+      
       final IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
+      cipherData.init(Cipher.ENCRYPT_MODE, dataKey, ivSpec);
+      final byte[] ciphertext = cipherData.doFinal(plaintext);
       
-      cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
-      final byte[] ciphertext = cipher.doFinal(plaintext);
+      // encrypt key
+      final SecretKeySpec keyKey = new SecretKeySpec(k, "AES");
+      final Cipher cipherKey = Cipher.getInstance("AES/ECB/PKCS5Padding");
+      cipherKey.init(Cipher.ENCRYPT_MODE, keyKey);
+      final byte[] encD = cipherKey.doFinal(d);
       
-      byte[] extCiphertext = new byte[ivBytes.length + ciphertext.length];
-      System.arraycopy(ivBytes, 0, extCiphertext, 0, ivBytes.length);
-      System.arraycopy(ciphertext, 0, extCiphertext, ivBytes.length, ciphertext.length);
-      
-      return extCiphertext;
+      return new EncryptedData(ivBytes, ciphertext, encD);
     } catch (Throwable e) {
       e.printStackTrace();
       throw new RuntimeException("Error on encrypt!");
     }
   }
   
-  public static byte[] dencrypt(byte[] secret, byte[] extCiphertext) {
+  public static byte[] dencrypt(byte[] k, EncryptedData ciphertext) {
     try {
+      // dencrypt key
+      final SecretKeySpec keyKey = new SecretKeySpec(k, "AES");
+      final Cipher cipherKey = Cipher.getInstance("AES/ECB/PKCS5Padding");
+      cipherKey.init(Cipher.DECRYPT_MODE, keyKey);
+      final byte[] d = cipherKey.doFinal(ciphertext.encD);
+      
+      // dencrypt data
       final Cipher cipher = Cipher.getInstance("AES/CBC/PKCS5Padding");
-      final SecretKeySpec key = new SecretKeySpec(secret, "AES");
+      final SecretKeySpec dataKey = new SecretKeySpec(d, "AES");
       
-      final byte[] ivBytes = new byte[cipher.getBlockSize()];
-      System.arraycopy(extCiphertext, 0, ivBytes, 0, ivBytes.length);
-      final IvParameterSpec ivSpec = new IvParameterSpec(ivBytes);
-      
-      final byte[] ciphertext = new byte[extCiphertext.length - ivBytes.length];
-      System.arraycopy(extCiphertext, ivBytes.length, ciphertext, 0, ciphertext.length);
-      
-      cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
-      return cipher.doFinal(ciphertext);
+      final IvParameterSpec ivSpec = new IvParameterSpec(ciphertext.iv);
+      cipher.init(Cipher.DECRYPT_MODE, dataKey, ivSpec);
+      return cipher.doFinal(ciphertext.data);
     } catch (Throwable e) {
       e.printStackTrace();
       throw new RuntimeException("Error on dencrypt!");
